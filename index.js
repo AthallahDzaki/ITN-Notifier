@@ -87,7 +87,7 @@ async function LoginToRealDevice()
     5. Return Cookies as plain text and used at GetData Function
     */
     let browser = await puppeteer.launch({
-        headless: false,
+        headless: "new",
     })
     let page = await browser.newPage();
     await page.goto("https://www.instagram.com/");
