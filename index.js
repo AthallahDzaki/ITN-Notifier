@@ -22,7 +22,7 @@ async function GetData(username)
                 'user-agent': "Mozilla/5.0 (Linux; Android 10; SM-A107F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.105 Mobile Safari/537.36",
                 'X-Ig-App-Id': "1217981644879628",
                 ["sec-fetch-site"]: "same-origin"
-            },
+            }
         }).then(async res => {
             let json = res.data;
             const items = json?.data?.user?.edge_owner_to_timeline_media?.edges || [];
@@ -45,6 +45,7 @@ async function GetData(username)
 
                 const carouselNodes = el?.['node']?.['edge_sidecar_to_children']?.['edges'];
                 if (carouselNodes?.length) {
+                    console.log(carouselNodes);
                     let carouselData = [];
                     for(let i = 0; i < carouselNodes.length; i++)
                     {
@@ -88,6 +89,7 @@ async function LoginToRealDevice()
     */
     let browser = await puppeteer.launch({
         headless: "new",
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     })
     let page = await browser.newPage();
     await page.goto("https://www.instagram.com/");
@@ -109,10 +111,18 @@ async function LoginToRealDevice()
         cookieStr += `${cookie[i].name}=${cookie[i].value.replaceAll("\\", "\/")}; `;
     }
     await browser.close();
+    console.log("Successfully Login to Real Device");
     return cookieStr;
 }
 
 (async () => {
+    if(!fs.existsSync("latest_id_FTI.txt"))
+        fs.writeFileSync("latest_id_FTI.txt", "");
+    if(!fs.existsSync("latest_id_INEWS.txt"))
+        fs.writeFileSync("latest_id_INEWS.txt", "");
+    if(!fs.existsSync("latest_id_ITNOfficial.txt"))
+        fs.writeFileSync("latest_id_ITNOfficial.txt", "");
+
     g_Cookies = await LoginToRealDevice();
     await GetFTIContent().then(async (res) => {
         console.log("FTI : ", res);
@@ -124,6 +134,11 @@ async function LoginToRealDevice()
     }).catch((err) => {
         console.log("INEWS ERR: " + err);
     })
+    await GetITNOfficialContent().then(async (res) => {
+        console.log("ITNOfficial : ", res);
+    }).catch((err) => {
+        console.log("ITNOfficial ERR: " + err);
+    });
 })();
 
 async function GetFTIContent()
@@ -435,6 +450,178 @@ async function GetINewsContent()
                     }
                 }
                 fs.writeSync(fs.openSync("latest_id_INEWS.txt", "w"), ret[3].id);
+                resolve("ALL Process Done");
+            }
+        }
+        else
+        {
+            reject("No New Post Detected at ITN Malang News");
+        }
+    });
+}
+
+async function GetITNOfficialContent()
+{
+    return new Promise(async (resolve, reject) => {
+        ret = await GetData("itnmalang_official");
+
+        if(fs.readFileSync("latest_id_ITNOfficial.txt", "utf-8") != ret[3].id)
+        {
+            console.log("New Post Detected at ITN Malang Official");
+            //fs.writeFileSync("latest_id.txt", ret[3].id);
+            let field = [{
+                "name": "Likes",
+                "value": `${ret[3].likes}`,
+                "inline": true
+            },
+            {
+                "name": "Comments",
+                "value": `${ret[3].comments}`,
+                "inline": true
+            }];
+
+            if(typeof( ret[3]?.location) != "undefined")
+            {
+                field.push({
+                    "name": "Location",
+                    "value": `${ret[3].location}`,
+                    "inline": true
+                });
+            }
+
+            if(typeof( ret[3]?.videoUrl ) != "undefined")
+            {
+                field.push({
+                    "name": "Video",
+                    "value": `Video is Under This Message`,
+                    "inline": true
+                });
+            }
+
+            field.push({
+                "name": "Date",
+                "value": `${new Date(ret[3].time * 1000)}`,
+                "inline": true
+            })
+
+            let post = {
+                "username": "ITN Malang Official",
+                "avatar_url": "https://instagram.fsub8-2.fna.fbcdn.net/v/t51.2885-19/339517124_735947274737635_6443078811397596592_n.jpg?stp=dst-jpg_s320x320&_nc_ht=instagram.fsub8-2.fna.fbcdn.net&_nc_cat=107&_nc_ohc=PZdhLRb7fHYAX9XmjB5&edm=AOQ1c0wBAAAA&ccb=7-5&cb_e2o_trans=t&oh=00_AfDO8X2OjetkKSht0NB45FrzQ7WJUIyP87uiSxUNZYeqTw&oe=64DFF27D&_nc_sid=8b3546",
+                "content": `New Content From ITN Malang News`,
+                "embeds": [
+                {
+                    "title": "ITN Malang Official",
+                    "url": `${ret[3].link}`,
+                    "description": `${ret[3].text}`,
+                    "color": 15258703,
+                    "fields": field,
+                    "thumbnail": {
+                    "url": "https://upload.wikimedia.org/wikipedia/commons/3/38/4-Nature-Wallpapers-2014-1_ukaavUI.jpg"
+                    },
+                    "footer": {
+                    "text": "Woah! So cool! 😲",
+                    "icon_url": "https://i.imgur.com/fKL31aD.jpg"
+                    }
+                }
+                ]
+            };
+
+            if(typeof(ret[3]?.imageUrl) != "undefined" && typeof(ret[3]?.carousel) == "undefined")
+            {
+                post.embeds[0].image = {
+                    "url": `${ret[3].imageUrl}`
+                };
+            }
+            else if(typeof(ret[3]?.carousel) != "undefined")
+            {
+                post.embeds[0].fields.push({
+                    "name": "Carousel",
+                    "value": `Carousel is Under This Message`,
+                    "inline": true
+                });
+            }
+
+            axios.post(WHURL, post).catch((err) => {
+                reject(err);
+            });
+
+            if(typeof(ret[3]?.carousel) != "undefined")
+            {
+                for(let i = 0; i < ret[3]?.carousel.length; i++)
+                {
+                    console.log(ret[3]?.carousel[i].image);
+                    const buffer = Buffer.from(ret[3]?.carousel[i].image, 'base64');
+                    const FormData = require('form-data');
+                    const form = new FormData;
+
+                    form.append('username', "ITN Malang Official");
+
+                    form.append('avatar_url', "https://instagram.fsub8-2.fna.fbcdn.net/v/t51.2885-19/339517124_735947274737635_6443078811397596592_n.jpg?stp=dst-jpg_s320x320&_nc_ht=instagram.fsub8-2.fna.fbcdn.net&_nc_cat=107&_nc_ohc=PZdhLRb7fHYAX9XmjB5&edm=AOQ1c0wBAAAA&ccb=7-5&cb_e2o_trans=t&oh=00_AfDO8X2OjetkKSht0NB45FrzQ7WJUIyP87uiSxUNZYeqTw&oe=64DFF27D&_nc_sid=8b3546");
+
+                    form.append('upload', buffer, ret[3].id +"_"+ i +".jpg");
+                    
+                    form.submit(WHURL, (error, response) => {
+                        
+                        if (error) reject(error);
+                        if (response) 
+                        {
+                            console.log("Uploaded Carousel "+i+" Because Have a Carousel Length");
+                        }
+                    });
+                }
+            }
+
+            if(typeof(ret[3]?.videoUrl) != "undefined")
+            {
+                const buffer = Buffer.from(ret[3]?.video, 'base64');
+                const FormData = require('form-data');
+                const form = new FormData;
+
+                form.append('username', "ITN Malang Official");
+
+                form.append('avatar_url', "https://instagram.fsub8-2.fna.fbcdn.net/v/t51.2885-19/339517124_735947274737635_6443078811397596592_n.jpg?stp=dst-jpg_s320x320&_nc_ht=instagram.fsub8-2.fna.fbcdn.net&_nc_cat=107&_nc_ohc=PZdhLRb7fHYAX9XmjB5&edm=AOQ1c0wBAAAA&ccb=7-5&cb_e2o_trans=t&oh=00_AfDO8X2OjetkKSht0NB45FrzQ7WJUIyP87uiSxUNZYeqTw&oe=64DFF27D&_nc_sid=8b3546");
+
+                form.append('upload', buffer, ret[3].id+".mp4");
+                
+                form.submit(WHURL, (error, response) => {
+                    
+                    if (error) reject(error);
+                    if (response) 
+                    {
+                        console.log("Uploaded MP4 Because Have a Video");
+                        fs.writeSync(fs.openSync("latest_id_ITNOfficial.txt", "w"), ret[3].id);
+                        resolve("ALL Process Done");
+                    }
+                });
+            }
+            else
+            {
+                if(typeof(ret[3]?.carousel) != "undefined")
+                {
+                    for(let i = 0; i < ret[3]?.carousel.length; i++)
+                    {
+                        console.log(ret[3]?.carousel[i].image);
+                        const buffer = Buffer.from(ret[3]?.carousel[i].image, 'base64');
+                        const FormData = require('form-data');
+                        const form = new FormData;
+
+                        form.append('username', "ITN Malang Official");
+
+                        form.append('avatar_url', "https://instagram.fsub8-2.fna.fbcdn.net/v/t51.2885-19/339517124_735947274737635_6443078811397596592_n.jpg?stp=dst-jpg_s320x320&_nc_ht=instagram.fsub8-2.fna.fbcdn.net&_nc_cat=107&_nc_ohc=PZdhLRb7fHYAX9XmjB5&edm=AOQ1c0wBAAAA&ccb=7-5&cb_e2o_trans=t&oh=00_AfDO8X2OjetkKSht0NB45FrzQ7WJUIyP87uiSxUNZYeqTw&oe=64DFF27D&_nc_sid=8b3546");
+
+                        form.append('upload', buffer, ret[3].id +"_"+ i +".jpg");
+                        
+                        form.submit(WHURL, (error, response) => {
+                            
+                            if (error) reject(error);
+                            if (response) 
+                            {
+                                console.log("Uploaded Carousel "+i+" Because Have a Carousel Length");
+                            }
+                        });
+                    }
+                }
+                fs.writeSync(fs.openSync("latest_id_ITNOfficial.txt", "w"), ret[3].id);
                 resolve("ALL Process Done");
             }
         }
