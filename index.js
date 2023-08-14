@@ -88,6 +88,7 @@ async function LoginToRealDevice()
     */
     let browser = await puppeteer.launch({
         headless: "new",
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     })
     let page = await browser.newPage();
     await page.goto("https://www.instagram.com/");
